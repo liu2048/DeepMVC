@@ -1,24 +1,29 @@
 import os
 import wandb
 import warnings
-import pytorch_lightning as pl
+import torch as th
 from copy import deepcopy
 
 import config
-from lib.loggers import fix_cmat
+from lib.logging import fix_cmat
 from lib.wandb_utils import get_default_run_info
 
 
 def evaluate(net, ckpt_path, loader, logger):
-    # Define a separate trainer here, so we don't get unwanted val_* stuff in the results.
-    eval_trainer = pl.Trainer(logger=logger, progress_bar_refresh_rate=0, gpus=config.GPUS)
     if not ckpt_path:
         warnings.warn(f"No 'best' checkpoint found at: '{ckpt_path}'.")
         ckpt_path = None
 
-    results = eval_trainer.test(model=net, test_dataloaders=loader, ckpt_path=ckpt_path, verbose=False)
-    assert len(results) == 1
-    return results[0]
+    net.load_state_dict(th.load(ckpt_path)["state_dict"])
+    net.eval()
+
+    results = []
+    with th.no_grad():
+        for batch in loader:
+            output = net(batch)
+            results.append(output)
+
+    return results
 
 
 def log_best_run(val_logs_list, test_logs_list, cfg, experiment_name, tag):

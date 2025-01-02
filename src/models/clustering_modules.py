@@ -1,22 +1,23 @@
-from abc import ABC, abstractmethod
-
-import numpy as np
-import torch as th
 import torch.nn as nn
-
 import helpers
 from lib.kernel import cdist
 
+class DDC(nn.Module):
+    def __init__(self, cfg, input_size):
+        super().__init__()
 
-def get_kernel_width_module(cfg, input_size):
-    return helpers.dict_selector(dct={
-        "Constant": Constant,
-        "AMISE": AMISE,
-        "MomentumAMISE": MomentumAMISE,
-        "MedianDistance": MedianDistance,
-        "MomentumMedianDistance": MomentumMedianDistance,
-    }, identifier="kernel width")(cfg.class_name)(cfg, input_size)
-
+        hidden_layers = [nn.Linear(input_size[0], cfg.n_hidden), nn.ReLU()]
+        if cfg.use_bn:
+            hidden_layers.append(nn.BatchNorm1d(num_features=cfg.n_hidden))
+        self.hidden = nn.Sequential(*hidden_layers)
+        self.output = nn.Sequential(nn.Linear(cfg.n_hidden, cfg.n_clusters), nn.Softmax(dim=1))
+        
+        self.kernel_width = get_kernel_width_module(cfg.kernel_width_config, input_size=[cfg.n_hidden])
+        
+    def forward(self, x):
+        hidden = self.hidden(x)
+        output = self.output(hidden)
+        return hidden, output
 
 class _KernelWidth(ABC, nn.Module):
     def __init__(self, cfg, input_size):
@@ -34,22 +35,12 @@ class _KernelWidth(ABC, nn.Module):
     def update_buffer(self, new):
         self.kernel_width = self.cfg.momentum * self.kernel_width + (1 - self.cfg.momentum) * new
 
-
-# ======================================================================================================================
-# Constant kernel width
-# ======================================================================================================================
-
 class Constant(_KernelWidth):
     def __init__(self, cfg, input_size):
         super(Constant, self).__init__(cfg, input_size)
 
     def forward(self, inputs=None, distances=None, assignments=None):
         return self.kernel_width
-
-
-# ======================================================================================================================
-#  Estimators based on asymptotic mean integrated squared error (AMISE)
-# ======================================================================================================================
 
 class AMISE(_KernelWidth):
     def __init__(self, cfg, input_size):
@@ -83,7 +74,6 @@ class AMISE(_KernelWidth):
     def forward(self, inputs=None, distances=None, assignments=None):
         return self.factor * self.std_estimator(inputs, assignments)
 
-
 class MomentumAMISE(AMISE):
     def forward(self, inputs=None, distances=None, assignments=None):
         if self.training:
@@ -92,11 +82,6 @@ class MomentumAMISE(AMISE):
         else:
             width = self.kernel_width
         return width
-
-
-# ======================================================================================================================
-#  Estimators based on median pairwise distances
-# ======================================================================================================================
 
 class MedianDistance(_KernelWidth):
     def __init__(self, cfg, input_size):
@@ -112,7 +97,6 @@ class MedianDistance(_KernelWidth):
     def forward(self, inputs=None, distances=None, assignments=None):
         return self._calc_width(inputs, distances)
 
-
 class MomentumMedianDistance(MedianDistance):
     def forward(self, inputs=None, distances=None, assignments=None):
         if self.training:
@@ -121,3 +105,18 @@ class MomentumMedianDistance(MedianDistance):
         else:
             width = self.kernel_width
         return width
+
+def get_kernel_width_module(cfg, input_size):
+    return helpers.dict_selector(dct={
+        "Constant": Constant,
+        "AMISE": AMISE,
+        "MomentumAMISE": MomentumAMISE,
+        "MedianDistance": MedianDistance,
+        "MomentumMedianDistance": MomentumMedianDistance,
+    }, identifier="kernel width")(cfg.class_name)(cfg, input_size)
+
+def get_clustering_module(cfg, input_size):
+    return helpers.dict_selector({
+        "DDC": DDC,
+        "HPDDC": HPDDC,
+    }, "clustering module")(cfg.class_name)(cfg, input_size)

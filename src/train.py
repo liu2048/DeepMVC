@@ -1,80 +1,84 @@
 import os
 import wandb
 import torch as th
-import pytorch_lightning as pl
+from torch.utils.data import DataLoader
+from torch.optim import Adam
+from torch.optim.lr_scheduler import StepLR
 
 import config
 import helpers
 from data.data_module import DataModule
 from models.build_model import build_model
-from lib.loggers import ConsoleLogger, WeightsAndBiasesLogger
-from lib.evaluate import evaluate, log_best_run
+from lib.logging import ConsoleLogger, WeightsAndBiasesLogger
+from lib.evaluation import evaluate, log_best_run
 from lib import wandb_utils
 
 
 def pre_train(cfg, net, data_module, save_dir, wandb_logger, console_logger):
     print(f"{80 * '='}\nPre-training started\n{80 * '='}")
-    best_callback = pl.callbacks.ModelCheckpoint(dirpath=save_dir, filename="pre_train_best", verbose=True,
-                                                 monitor="val_loss/tot", mode="min", every_n_epochs=cfg.eval_interval,
-                                                 save_top_k=1)
-    checkpoint_callback = pl.callbacks.ModelCheckpoint(dirpath=save_dir, filename="pre_train_checkpoint_{epoch:04d}",
-                                                       verbose=True, save_top_k=-1,
-                                                       every_n_epochs=cfg.checkpoint_interval,
-                                                       save_on_train_epoch_end=True)
-    trainer = pl.Trainer(
-        callbacks=[best_callback, checkpoint_callback],
-        logger=[wandb_logger, console_logger],
-        log_every_n_steps=data_module.n_batches,
-        check_val_every_n_epoch=cfg.eval_interval,
-        enable_progress_bar=False,
-        max_epochs=cfg.n_pre_train_epochs,
-        gpus=cfg.gpus,
-        deterministic=cfg.trainer_deterministic,
-        num_sanity_val_steps=cfg.num_sanity_val_steps,
-        detect_anomaly=cfg.detect_anomaly,
-    )
-    trainer.fit(net, datamodule=data_module)
+    best_model_path = os.path.join(save_dir, "pre_train_best.pth")
+    checkpoint_path = os.path.join(save_dir, "pre_train_checkpoint.pth")
+
+    optimizer = Adam(net.parameters(), lr=cfg.lr)
+    scheduler = StepLR(optimizer, step_size=cfg.step_size, gamma=cfg.gamma)
+
+    for epoch in range(cfg.n_pre_train_epochs):
+        net.train()
+        for batch in data_module.train_dataloader():
+            optimizer.zero_grad()
+            loss = net.training_step(batch, batch_idx=0)
+            loss.backward()
+            optimizer.step()
+
+        scheduler.step()
+
+        if epoch % cfg.eval_interval == 0:
+            val_loss = evaluate(net, data_module.val_dataloader())
+            if val_loss < best_val_loss:
+                best_val_loss = val_loss
+                th.save(net.state_dict(), best_model_path)
+
+        if epoch % cfg.checkpoint_interval == 0:
+            th.save(net.state_dict(), checkpoint_path)
+
     print(f"{80 * '='}\nPre-training finished\n{80 * '='}")
 
 
 def train(cfg, net, data_module, save_dir, wandb_logger, console_logger, initial_epoch=0):
-    best_callback = pl.callbacks.ModelCheckpoint(dirpath=save_dir, filename="best", verbose=True,
-                                                 monitor="val_loss/tot", mode="min", every_n_epochs=cfg.eval_interval,
-                                                 save_top_k=1)
-    checkpoint_callback = pl.callbacks.ModelCheckpoint(dirpath=save_dir, filename="checkpoint_{epoch:04d}",
-                                                       verbose=True, save_top_k=-1,
-                                                       every_n_epochs=cfg.checkpoint_interval,
-                                                       save_on_train_epoch_end=True)
+    best_model_path = os.path.join(save_dir, "best.pth")
+    checkpoint_path = os.path.join(save_dir, "checkpoint.pth")
 
-    # ==== Train ====
-    try:
-        gradient_clip_val = cfg.model_config.optimizer_config.clip_norm
-    except AttributeError:
-        gradient_clip_val = 0
+    optimizer = Adam(net.parameters(), lr=cfg.lr)
+    scheduler = StepLR(optimizer, step_size=cfg.step_size, gamma=cfg.gamma)
 
-    trainer = pl.Trainer(
-        callbacks=[best_callback, checkpoint_callback],
-        logger=[wandb_logger, console_logger],
-        log_every_n_steps=data_module.n_batches,
-        check_val_every_n_epoch=cfg.eval_interval,
-        enable_progress_bar=False,
-        max_epochs=(cfg.n_epochs + initial_epoch),
-        gradient_clip_val=gradient_clip_val,
-        gpus=cfg.gpus,
-        deterministic=cfg.trainer_deterministic,
-        num_sanity_val_steps=cfg.num_sanity_val_steps,
-        detect_anomaly=cfg.detect_anomaly,
-        # profiler="advanced"
-    )
-    trainer.fit(net, datamodule=data_module)
+    best_val_loss = float('inf')
+
+    for epoch in range(initial_epoch, cfg.n_epochs + initial_epoch):
+        net.train()
+        for batch in data_module.train_dataloader():
+            optimizer.zero_grad()
+            loss = net.training_step(batch, batch_idx=0)
+            loss.backward()
+            optimizer.step()
+
+        scheduler.step()
+
+        if epoch % cfg.eval_interval == 0:
+            val_loss = evaluate(net, data_module.val_dataloader())
+            if val_loss < best_val_loss:
+                best_val_loss = val_loss
+                th.save(net.state_dict(), best_model_path)
+
+        if epoch % cfg.checkpoint_interval == 0:
+            th.save(net.state_dict(), checkpoint_path)
 
     # ==== Evaluate ====
     # Validation set
     net.test_prefix = "val"
-    val_results = evaluate(net, best_callback.best_model_path, data_module.val_dataloader(), console_logger)
+    val_results = evaluate(net, best_model_path, data_module.val_dataloader(), console_logger)
     # Test set
     net.test_prefix = "test"
-    test_results = evaluate(net, best_callback.best_model_path, data_module.test_dataloader(), console_logger)
+    test_results = evaluate(net, best_model_path, data_module.test_dataloader(), console_logger)
     # Log evaluation results
     wandb_logger.log_summary(val_results, test_results)
     wandb.join()
@@ -84,7 +88,9 @@ def train(cfg, net, data_module, save_dir, wandb_logger, console_logger, initial
 
 def set_seeds(seed=None, workers=False, offset=0, deterministic_algorithms=True):
     if seed is not None:
-        pl.seed_everything(seed + offset, workers=workers)
+        th.manual_seed(seed + offset)
+        if th.cuda.is_available():
+            th.cuda.manual_seed_all(seed + offset)
     # th.use_deterministic_algorithms(deterministic_algorithms)
 
 
@@ -142,7 +148,6 @@ def main(ename, cfg, tag):
 
 if __name__ == '__main__':
     print("Torch version:", th.__version__)
-    print("Lightning version:", pl.__version__)
 
     ename, cfg = config.get_experiment_config()
     wandb_env_vars = wandb_utils.clear_wandb_env()
