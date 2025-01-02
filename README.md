@@ -70,11 +70,6 @@ Note that some new instances have names in this implementation, compared to in t
 | InfoDDC       | MIMVC                  | `mimvc`                   |
 
 
-
-### Logging results with Weights and Biases.
-`train.py` logs the experiment results to a [Weights and Biases](https://wandb.ai/site) project.
-The project name is specified by setting `WANDB_PROJECT="<project_name>"` in [`src/lib/wandb_utils.py`](src/lib/wandb_utils.py) (set to `"mvc-framework"` by default.) 
-
 ### Running experiments with Docker
 A docker image with all dependencies can be built by running
 ```bash

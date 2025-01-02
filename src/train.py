@@ -1,5 +1,4 @@
 import os
-import wandb
 import torch as th
 from torch.utils.data import DataLoader
 from torch.optim import Adam
@@ -9,12 +8,11 @@ import config
 import helpers
 from data.data_module import DataModule
 from models.build_model import build_model
-from lib.logging import ConsoleLogger, WeightsAndBiasesLogger
-from lib.evaluation import evaluate, log_best_run
-from lib import wandb_utils
+from lib.logging import ConsoleLogger
+from lib.evaluation import evaluate
 
 
-def pre_train(cfg, net, data_module, save_dir, wandb_logger, console_logger):
+def pre_train(cfg, net, data_module, save_dir, console_logger):
     print(f"{80 * '='}\nPre-training started\n{80 * '='}")
     best_model_path = os.path.join(save_dir, "pre_train_best.pth")
     checkpoint_path = os.path.join(save_dir, "pre_train_checkpoint.pth")
@@ -44,7 +42,7 @@ def pre_train(cfg, net, data_module, save_dir, wandb_logger, console_logger):
     print(f"{80 * '='}\nPre-training finished\n{80 * '='}")
 
 
-def train(cfg, net, data_module, save_dir, wandb_logger, console_logger, initial_epoch=0):
+def train(cfg, net, data_module, save_dir, console_logger, initial_epoch=0):
     best_model_path = os.path.join(save_dir, "best.pth")
     checkpoint_path = os.path.join(save_dir, "checkpoint.pth")
 
@@ -79,9 +77,6 @@ def train(cfg, net, data_module, save_dir, wandb_logger, console_logger, initial
     # Test set
     net.test_prefix = "test"
     test_results = evaluate(net, best_model_path, data_module.test_dataloader(), console_logger)
-    # Log evaluation results
-    wandb_logger.log_summary(val_results, test_results)
-    wandb.join()
 
     return val_results, test_results
 
@@ -100,7 +95,6 @@ def main(ename, cfg, tag):
 
     val_logs, test_logs = [], []
     for run in range(cfg.n_runs):
-        wandb_utils.clear_wandb_env()
         set_seeds(seed=cfg.everything_seed, offset=run)
 
         net = build_model(cfg.model_config, run=run)
@@ -111,7 +105,6 @@ def main(ename, cfg, tag):
         os.makedirs(save_dir, exist_ok=True)
         cfg.to_pickle(save_dir / "config.pkl")
 
-        wandb_logger = WeightsAndBiasesLogger(ename, tag, run, cfg, net)
         console_logger = ConsoleLogger(ename, print_cmat=(cfg.n_clusters <= 10))
 
         initial_epoch = 0
@@ -123,40 +116,30 @@ def main(ename, cfg, tag):
                 net=net,
                 data_module=data_module,
                 save_dir=save_dir,
-                wandb_logger=wandb_logger,
                 console_logger=console_logger,
             )
             net.init_fine_tune()
             console_logger.epoch_offset = cfg.n_pre_train_epochs
-            wandb_logger.epoch_offset = cfg.n_pre_train_epochs
 
         val, test = train(
             cfg=cfg,
             net=net,
             data_module=data_module,
             save_dir=save_dir,
-            wandb_logger=wandb_logger,
             console_logger=console_logger,
             initial_epoch=initial_epoch,
         )
         val_logs.append(val)
         test_logs.append(test)
 
-    best_val_logs, best_test_logs = log_best_run(val_logs, test_logs, cfg, ename, tag)
-    return val_logs, test_logs, best_val_logs, best_test_logs
+    return val_logs, test_logs
 
 
 if __name__ == '__main__':
     print("Torch version:", th.__version__)
 
     ename, cfg = config.get_experiment_config()
-    wandb_env_vars = wandb_utils.clear_wandb_env()
 
-    tag = wandb_utils.get_experiment_tag()
+    tag = "experiment_tag"
 
     all_logs = main(ename, cfg, tag)
-
-    if cfg.is_sweep:
-        # Log to the original sweep-run if this experiment is part of a sweep
-        sweep_run = wandb_utils.init_sweep_run(ename, tag, cfg, wandb_env_vars)
-        wandb_utils.finalize_sweep_run(sweep_run, all_logs)

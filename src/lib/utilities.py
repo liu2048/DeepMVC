@@ -5,7 +5,6 @@ from sklearn import preprocessing, decomposition
 from scipy.optimize import linear_sum_assignment
 from scipy.special import comb
 from sklearn.metrics import confusion_matrix, normalized_mutual_info_score, adjusted_rand_score
-import wandb
 import argparse
 import plotly.figure_factory as ff
 from contextlib import contextmanager
@@ -17,7 +16,6 @@ import helpers
 import config
 from lib.encoder import Encoder
 from lib.metrics import cmat_from_dict
-from lib.wandb_utils import WANDB_PROJECT, get_default_run_info
 
 
 # Utility functions

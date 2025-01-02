@@ -1,12 +1,10 @@
 import os
-import wandb
 import warnings
 import torch as th
 from copy import deepcopy
 
 import config
 from lib.logging import fix_cmat
-from lib.wandb_utils import get_default_run_info
 
 
 def evaluate(net, ckpt_path, loader, logger):
@@ -27,20 +25,6 @@ def evaluate(net, ckpt_path, loader, logger):
 
 
 def log_best_run(val_logs_list, test_logs_list, cfg, experiment_name, tag):
-    run_info = get_default_run_info(experiment_name, tag, "best", cfg)
-    os.makedirs(run_info.dir, exist_ok=True)
-    
-    wandb_run = wandb.init(
-        project=run_info.project,
-        group=run_info.group,
-        name=run_info.name,
-        dir=run_info.dir,
-        id=run_info.id,
-        tags=run_info.tags,
-        config=run_info.cfg,
-        reinit=True
-    )
-
     best_run = None
     best_loss = float("inf")
     for run, logs in enumerate(val_logs_list):
@@ -57,14 +41,10 @@ def log_best_run(val_logs_list, test_logs_list, cfg, experiment_name, tag):
         if f"{set_type}_metrics/cmat" not in best_logs:
             fix_cmat(best_logs, set_type=set_type)
 
-        for key, value in best_logs.items():
-            wandb_run.summary[f"summary/{key}"] = value
-
     best_val_logs = val_logs_list[best_run]
     best_test_logs = test_logs_list[best_run]
 
     _log_best("val", best_val_logs)
     _log_best("test", best_test_logs)
 
-    wandb_run.finish()
     return best_val_logs, best_test_logs

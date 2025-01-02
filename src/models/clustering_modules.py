@@ -1,6 +1,9 @@
 import torch.nn as nn
 import helpers
 from lib.kernel import cdist
+from abc import ABC, abstractmethod
+import numpy as np
+import torch as th
 
 class DDC(nn.Module):
     def __init__(self, cfg, input_size):
@@ -118,5 +121,4 @@ def get_kernel_width_module(cfg, input_size):
 def get_clustering_module(cfg, input_size):
     return helpers.dict_selector({
         "DDC": DDC,
-        "HPDDC": HPDDC,
     }, "clustering module")(cfg.class_name)(cfg, input_size)

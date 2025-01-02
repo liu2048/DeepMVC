@@ -253,9 +253,10 @@ def patchedmnist():
     views = []
     for i in range(4):
         for j in range(4):
-            if (i in {0, 3}) and (j in {0, 3}):
+            if (i in {0, 3}) and (j in {0, 3}) {
                 # Skip corner patches
                 continue
+            }
 
             h_min, h_max = i * h, (i + 1) * h
             w_min, w_max = j * w, (j + 1) * w
