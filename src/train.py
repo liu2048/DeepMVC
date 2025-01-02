@@ -1,6 +1,8 @@
 import os
 import wandb
 import torch as th
+import torch.optim as optim
+import torch.nn as nn
 import pytorch_lightning as pl
 
 import config
@@ -37,46 +39,53 @@ def pre_train(cfg, net, data_module, save_dir, wandb_logger, console_logger):
     print(f"{80 * '='}\nPre-training finished\n{80 * '='}")
 
 
-def train(cfg, net, data_module, save_dir, wandb_logger, console_logger, initial_epoch=0):
-    best_callback = pl.callbacks.ModelCheckpoint(dirpath=save_dir, filename="best", verbose=True,
-                                                 monitor="val_loss/tot", mode="min", every_n_epochs=cfg.eval_interval,
-                                                 save_top_k=1)
-    checkpoint_callback = pl.callbacks.ModelCheckpoint(dirpath=save_dir, filename="checkpoint_{epoch:04d}",
-                                                       verbose=True, save_top_k=-1,
-                                                       every_n_epochs=cfg.checkpoint_interval,
-                                                       save_on_train_epoch_end=True)
+def train(cfg, net, data_module, save_dir, console_logger):
+    print(f"{80 * '='}\nTraining started\n{80 * '='}")
 
-    # ==== Train ====
-    try:
-        gradient_clip_val = cfg.model_config.optimizer_config.clip_norm
-    except AttributeError:
-        gradient_clip_val = 0
+    # 设置优化器和损失函数
+    optimizer = optim.Adam(net.parameters(), lr=cfg.model_config.optimizer_config.lr)
+    criterion = nn.CrossEntropyLoss()
 
-    trainer = pl.Trainer(
-        callbacks=[best_callback, checkpoint_callback],
-        logger=[wandb_logger, console_logger],
-        log_every_n_steps=data_module.n_batches,
-        check_val_every_n_epoch=cfg.eval_interval,
-        enable_progress_bar=False,
-        max_epochs=(cfg.n_epochs + initial_epoch),
-        gradient_clip_val=gradient_clip_val,
-        gpus=cfg.gpus,
-        deterministic=cfg.trainer_deterministic,
-        num_sanity_val_steps=cfg.num_sanity_val_steps,
-        detect_anomaly=cfg.detect_anomaly,
-        # profiler="advanced"
-    )
-    trainer.fit(net, datamodule=data_module)
+    # 训练循环
+    for epoch in range(cfg.n_epochs):
+        net.train()
+        running_loss = 0.0
+        for i, data in enumerate(data_module.train_dataloader(), 0):
+            inputs, labels = data
+            optimizer.zero_grad()
+            outputs = net(inputs)
+            loss = criterion(outputs, labels)
+            loss.backward()
+            optimizer.step()
+            running_loss += loss.item()
+            if i % cfg.log_interval == cfg.log_interval - 1:
+                console_logger.log(f"[{epoch + 1}, {i + 1}] loss: {running_loss / cfg.log_interval:.3f}")
+                running_loss = 0.0
+
+        # 验证
+        net.eval()
+        val_loss = 0.0
+        with torch.no_grad():
+            for data in data_module.val_dataloader():
+                inputs, labels = data
+                outputs = net(inputs)
+                loss = criterion(outputs, labels)
+                val_loss += loss.item()
+        console_logger.log(f"Validation loss after epoch {epoch + 1}: {val_loss / len(data_module.val_dataloader()):.3f}")
+
+        # 保存模型
+        torch.save(net.state_dict(), os.path.join(save_dir, f"checkpoint_epoch_{epoch + 1}.pth"))
+
+    print("Finished Training")
 
     # ==== Evaluate ====
     # Validation set
     net.test_prefix = "val"
-    val_results = evaluate(net, best_callback.best_model_path, data_module.val_dataloader(), console_logger)
+    val_results = evaluate(net, os.path.join(save_dir, f"checkpoint_epoch_{cfg.n_epochs}.pth"), data_module.val_dataloader(), console_logger)
     # Test set
     net.test_prefix = "test"
-    test_results = evaluate(net, best_callback.best_model_path, data_module.test_dataloader(), console_logger)
+    test_results = evaluate(net, os.path.join(save_dir, f"checkpoint_epoch_{cfg.n_epochs}.pth"), data_module.test_dataloader(), console_logger)
     # Log evaluation results
-    wandb_logger.log_summary(val_results, test_results)
     wandb.join()
 
     return val_results, test_results
@@ -129,9 +138,7 @@ def main(ename, cfg, tag):
             net=net,
             data_module=data_module,
             save_dir=save_dir,
-            wandb_logger=wandb_logger,
             console_logger=console_logger,
-            initial_epoch=initial_epoch,
         )
         val_logs.append(val)
         test_logs.append(test)
