@@ -98,7 +98,9 @@ def main(ename, cfg, tag):
         set_seeds(seed=cfg.everything_seed, offset=run)
 
         net = build_model(cfg.model_parameters, run=run)
-        print(net)
+        # 注释掉或删除模型结构的打印语句
+        # print(net)
+        # wandb.watch(net, log="all")  # 记录模型结构到 wandb
         net.attach_data_module(data_module)
 
         save_dir = helpers.get_save_dir(ename, tag, run)
