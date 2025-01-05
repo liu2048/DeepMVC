@@ -79,10 +79,10 @@ class WeightsAndBiasesLogger(LightningLoggerBase):
         super(WeightsAndBiasesLogger, self).__init__()
 
         run_info = get_default_run_info(name, tag, run, cfg)
-        self.group = run_info.group
+        self.group = cfg.dataset_config.name  # Group runs by dataset name
         self.wanbd_run = wandb.init(
             project=WANDB_PROJECT,
-            group=run_info.group,
+            group=self.group,
             name=run_info.name,
             id=run_info.id,
             dir=run_info.dir,

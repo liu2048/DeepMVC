@@ -40,8 +40,8 @@ def get_default_run_info(experiment_name, tag, run, cfg):
     if isinstance(run, int):
         run = f"run-{run}"
 
-    group = f"{experiment_name}-{tag}"
-    name = f"{group}-{run}"
+    group = cfg["dataset_config"]["name"]  # Group runs by dataset name
+    name = f"{experiment_name}-{tag}-{run}"
     _dir = helpers.get_save_dir(experiment_name, tag, run)
     os.makedirs(_dir, exist_ok=True)
 
