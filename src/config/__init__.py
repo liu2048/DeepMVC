@@ -14,7 +14,7 @@ SKIP_KEYS = ("illegal_vars",)
 
 def parse_config_name_arg():
     parser = ArgumentParser()
-    parser.add_argument("-c", "--config", dest="config_name", required=True)
+    parser.add_argument("-c", "--config", dest="config_name", required=False, default="default_config")
     return parser.parse_known_args()[0].config_name
 
 
@@ -59,8 +59,8 @@ def parse_cli_args(cfg_dict):
         parser.add_argument("--" + key, dest=key, type=value_type)
 
     args, unknown = parser.parse_known_args()
-    # The only unknown argument we expect to find is "-c" or "--config".
-    assert (len(unknown) == 2) and (unknown[0] in ("-c", "--config")), f"Got unexpected unknown arguments: {unknown}"
+    if len(unknown) > 0:
+        assert (len(unknown) == 2) and (unknown[0] in ("-c", "--config")), f"Got unexpected unknown arguments: {unknown}"
     args = vars(args)
     return args
 
