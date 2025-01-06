@@ -150,3 +150,24 @@ The custom experiment can then be run with
 ```bash
 python train.py -c noisymnist_comvc_custom
 ```
+
+## Project File Structure
+
+This section provides an overview of the main directories and files in the project, along with their purpose and functionality.
+
+- `.dockerignore`: Specifies files and directories to be ignored by Docker.
+- `.gitignore`: Specifies files and directories to be ignored by Git.
+- `environment.yml`: Defines the conda environment and its dependencies.
+- `LICENSE`: Contains the license information for the project.
+- `README.md`: Provides an overview of the project, including instructions and documentation.
+- `requirements.txt`: Lists the Python dependencies required for the project.
+- `src/config`: Contains configuration files and templates for experiments, datasets, models, etc.
+- `src/data`: Contains scripts and modules for data loading, preprocessing, and augmentation.
+- `src/helpers.py`: Contains helper functions used throughout the project.
+- `src/lib`: Contains utility modules and functions for evaluation, logging, loss computation, etc.
+- `src/models`: Contains the implementation of various models used in the project.
+- `src/register.py`: Contains the registration of custom modules and functions.
+- `src/train.py`: Contains the main training script for running experiments.
+
+For detailed descriptions of the files in each directory, please refer to the respective `README.md` files in the corresponding directories.
+
