@@ -168,6 +168,10 @@ This section provides an overview of the main directories and files in the proje
 - `src/models`: Contains the implementation of various models used in the project.
 - `src/register.py`: Contains the registration of custom modules and functions.
 - `src/train.py`: Contains the main training script for running experiments.
+- `src/scripts`: Contains shell scripts for running experiments and generating datasets.
+  - `generate_datasets.sh`: Generates datasets for the project.
+  - `benchmark.sh`: Runs benchmark experiments for the project.
+  - `ablation.sh`: Runs ablation study experiments for the project.
+  - `increasing_views.sh`: Runs experiments with increasing views for the project.
 
 For detailed descriptions of the files in each directory, please refer to the respective `README.md` files in the corresponding directories.
-
