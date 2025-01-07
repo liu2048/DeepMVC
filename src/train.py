@@ -57,7 +57,7 @@ def train(cfg, net, data_module, save_dir, wandb_logger, console_logger, initial
         logger=[wandb_logger, console_logger],
         log_every_n_steps=data_module.n_batches,
         check_val_every_n_epoch=cfg.eval_interval,
-        enable_progress_bar=False,
+        enable_progress_bar=True,
         max_epochs=(cfg.n_epochs + initial_epoch),
         gradient_clip_val=gradient_clip_val,
         gpus=cfg.gpus,

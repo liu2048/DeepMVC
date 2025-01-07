@@ -11,12 +11,16 @@ from lib.wandb_utils import get_default_run_info
 
 def evaluate(net, ckpt_path, loader, logger):
     # Define a separate trainer here, so we don't get unwanted val_* stuff in the results.
-    eval_trainer = pl.Trainer(logger=logger, progress_bar_refresh_rate=0, gpus=config.GPUS)
+    # FIXME Setting `Trainer(progress_bar_refresh_rate=0)` is deprecated in v1.5 and will be removed in v1.7.
+    # DONE 
+    eval_trainer = pl.Trainer(logger=logger, refresh_rate=0, gpus=config.GPUS)
     if not ckpt_path:
         warnings.warn(f"No 'best' checkpoint found at: '{ckpt_path}'.")
         ckpt_path = None
 
-    results = eval_trainer.test(model=net, test_dataloaders=loader, ckpt_path=ckpt_path, verbose=False)
+    # FIXME `trainer.test(test_dataloaders)` is deprecated in v1.4 and will be removed in v1.6. Use `trainer.test(dataloaders)` instead.
+    # DONE
+    results = eval_trainer.test(model=net, dataloaders=loader, ckpt_path=ckpt_path, verbose=False) 
     assert len(results) == 1
     return results[0]
 

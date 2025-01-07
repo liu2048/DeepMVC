@@ -60,7 +60,8 @@ class ConsoleLogger(LightningLoggerBase):
         if "time_delta" in headers:
             helpers.move_elem_to_idx(headers, elem="time_delta", idx=1, twins=(values,))
 
-        print(tabulate([values], headers=headers), "\n")
+        # TODO : remove this
+        # print(tabulate([values], headers=headers), "\n") 
 
     def log_hyperparams(self, params):
         pass

@@ -14,7 +14,7 @@ SKIP_KEYS = ("illegal_vars",)
 
 def parse_config_name_arg():
     parser = ArgumentParser()
-    parser.add_argument("-c", "--config", dest="config_name", required=False, default="default_config")
+    parser.add_argument("-c", "--config", dest="config_name", required=False, default="blobs_comvc")
     return parser.parse_known_args()[0].config_name
 
 
